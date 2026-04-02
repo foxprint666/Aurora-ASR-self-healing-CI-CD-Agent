@@ -1,0 +1,65 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="openenv-asr",
+    version="0.2.0",
+    description="OpenEnv environment for Automated Software Repair with Hybrid Actor-Critic Agent",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    author="Your Name",
+    author_email="your.email@example.com",
+    url="https://github.com/YOUR-USERNAME/openenv-asr",
+    packages=find_packages(),
+    python_requires=">=3.8",
+    install_requires=[
+        "gym>=0.21.0",
+        "gymnasium>=0.27.0",
+        "docker>=5.0.0",
+        "tree-sitter>=0.20.0",
+        "pytest>=7.0.0",
+        "numpy>=1.21.0",
+        "torch>=1.10.0",
+        "transformers>=4.20.0",
+    ],
+    extras_require={
+        "dev": [
+            "pytest>=7.0.0",
+            "pytest-cov>=3.0.0",
+            "black>=22.0.0",
+            "flake8>=4.0.0",
+        ],
+        "advanced": [
+            "pytorch-lightning>=1.8.0",
+            "tensorboard>=2.10.0",
+            "wandb>=0.13.0",
+        ],
+    },
+    entry_points={
+        'console_scripts': [
+            'openenv-train=training.train_hybrid_agent:main',
+            'openenv-eval=training.evaluate_agent:main',
+        ],
+    },
+    classifiers=[
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Software Development :: Bug Reports",
+    ],
+    keywords=[
+        "automated software repair",
+        "machine learning",
+        "reinforcement learning",
+        "code generation",
+        "openai gym",
+        "gymnasium",
+    ],
+    include_package_data=True,
+    python_requires=">=3.8",
+)
