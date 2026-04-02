@@ -1,4 +1,15 @@
+---
+title: Aurora ASR Self-Healing Agent
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Aurora ASR: The Self-Healing CI/CD Agent 🚀
+
 
 **Aurora ASR** is a high-performance, **OpenEnv-v4 compliant** Automated Software Repair system. It leverages Reinforcement Learning and Large Language Models (LLMs) to autonomously detect and repair software bugs within isolated sandboxes.
 

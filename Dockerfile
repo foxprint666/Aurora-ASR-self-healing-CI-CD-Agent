@@ -1,61 +1,38 @@
-# Multi-stage build for OpenEnv ASR
+# Optimized Dockerfile for Hugging Face Spaces (Aurora ASR)
+FROM python:3.10-slim
 
-# Stage 1: Builder
-FROM python:3.10-slim as builder
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    HOME=/home/asr \
+    PATH=/home/asr/.local/bin:$PATH
 
-WORKDIR /build
+WORKDIR /app
 
-# Install build dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
-
-# Build wheels
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements.txt
-
-# Stage 2: Runtime
-FROM python:3.10-slim
-
-WORKDIR /app
-
-LABEL maintainer="OpenEnv Contributors"
-LABEL description="OpenEnv Automated Software Repair Environment"
-LABEL version="0.2.0"
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy wheels from builder
-COPY --from=builder /build/wheels /wheels
-COPY --from=builder /build/requirements.txt .
-
-# Install Python packages
-RUN pip install --no-cache /wheels/*
-
-# Copy project
-COPY . .
-
-# Install package
-RUN pip install -e .
-
-# Create non-root user
+# Create a non-root user (Hugging Face requires UID 1000)
 RUN useradd -m -u 1000 asr
+RUN chown -R asr:asr /app
 USER asr
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV CUDA_VISIBLE_DEVICES=0
+# Install Python dependencies
+COPY --chown=asr:asr requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --user gradio google-genai
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import torch; import environment; print('OK')" || exit 1
+# Copy project files
+COPY --chown=asr:asr . .
 
-# Default command
-CMD ["python", "-m", "training.train_hybrid_agent", "--episodes", "100", "--device", "cuda"]
+# Install the package in editable mode
+RUN pip install --user -e .
+
+# Expose the default Hugging Face port
+EXPOSE 7860
+
+# Start the Gradio dashboard
+CMD ["python", "app.py"]
