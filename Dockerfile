@@ -34,5 +34,5 @@ RUN pip install --user -e .
 # Expose the default Hugging Face port
 EXPOSE 7860
 
-# Start the Gradio dashboard
-CMD ["python", "app.py"]
+# Start the FastAPI + Gradio server
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]

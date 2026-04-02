@@ -22,3 +22,9 @@ pytest-cov>=3.0.0
 black>=22.0.0
 flake8>=4.0.0
 rich>=13.0.0
+
+# Server-Mode Compliance
+fastapi>=0.100.0
+uvicorn>=0.21.0
+gradio>=4.0.0
+python-multipart>=0.0.6
