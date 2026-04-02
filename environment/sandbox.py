@@ -39,13 +39,19 @@ class Sandbox:
         
         # Copy template repo
         if os.path.exists(repo_template):
-            for item in os.listdir(repo_template):
-                src = os.path.join(repo_template, item)
-                dst = os.path.join(self.episode_dir, item)
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
+            if os.path.isdir(repo_template):
+                # If directory, copy contents
+                for item in os.listdir(repo_template):
+                    src = os.path.join(repo_template, item)
+                    dst = os.path.join(self.episode_dir, item)
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(src, dst)
+            else:
+                # If it's a file (shouldn't happen with current design but for safety)
+                shutil.copy2(repo_template, self.episode_dir)
+
         
         # Create src/ and tests/ if they don't exist
         os.makedirs(os.path.join(self.episode_dir, "src"), exist_ok=True)

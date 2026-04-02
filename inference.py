@@ -103,12 +103,23 @@ Respond in JSON format: {{"command": "...", "params": {{...}}}}
     print(f"[END] Success: {success} Score: {final_score}")
 
 if __name__ == "__main__":
-    # In a real OpenEnv submission, the task_id would be passed or iterated
-    tasks = [
-        ("easy", "tasks/easy"),
-        ("medium", "tasks/medium"),
-        ("hard", "tasks/hard")
-    ]
-    
-    for t_id, t_path in tasks:
-        run_inference(t_id, t_path)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task_id", type=str, default=None)
+    parser.add_argument("--repo_path", type=str, default=None)
+    args = parser.parse_args()
+
+    if args.task_id and args.repo_path:
+        # Run a single custom task (e.g., from an upload)
+        run_inference(args.task_id, args.repo_path)
+    else:
+        # Run standard benchmark tasks
+        tasks = [
+            ("easy", "tasks/easy"),
+            ("medium", "tasks/medium"),
+            ("hard", "tasks/hard")
+        ]
+        
+        for t_id, t_path in tasks:
+            run_inference(t_id, t_path)
+
