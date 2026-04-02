@@ -1,372 +1,78 @@
 # Aurora ASR: The Self-Healing CI/CD Agent 🚀
 
-**Aurora** is an advanced, RL-powered Automated Software Repair (ASR) system designed to identify, analyze, and repair code bugs autonomously within your CI/CD pipeline.
+**Aurora ASR** is a high-performance, **OpenEnv-v4 compliant** Automated Software Repair system. It leverages Reinforcement Learning and Large Language Models (LLMs) to autonomously detect and repair software bugs within isolated sandboxes.
 
-## 🎯 The Vision
-Modern developers spend up to 30% of their time debugging trivial errors (off-by-one, operator flips, null references). **Aurora** aims to recover that time by living in your GitHub Actions, catching failing tests, and proposing high-confidence AST-aware patches before you even notice.
+## 🌟 Features
+- **OpenEnv-v4 Compliant**: Fully compatible with the Meta PyTorch Hackathon automated judging system (`[OK] : Ready for multi-mode deployment`).
+- **Typed API**: Uses strict Pydantic models for **Observations**, **Actions**, and **Rewards**.
+- **3-Tier Task System**: Includes Easy (Typo), Medium (Logic), and Hard (Edge Case) repair challenges.
+- **Smart Fallback (Mock Mode)**: Automatically switches to a scripted **Mock Agent** if no API key is provided, allowing for offline demos and testing.
+- **Structured Logging**: Emits `[START]`, `[STEP]`, and `[END]` tags for real-time progress tracking and grading.
+- **Dockerized Sandboxing**: Safe execution of agent-generated code with resource limits.
 
-## 📺 Interactive Demo
-We've included a high-impact visual demo to showcase Aurora's reasoning in real-time.
-```bash
-# Run the Aurora Repair Pipeline Visualization
-python hackathon_demo.py
+## 🛠️ Installation
+Using the Python Launcher for Windows (`py`):
+```cmd
+# Install core dependencies
+py -m pip install -r requirements.txt
+
+# Install the OpenEnv core library
+py -m pip install openenv-core
 ```
 
-Perfect for research in:
-- Automated Program Repair (APR)
-- Code Generation with RL
-- Self-Healing Systems
-- Bug Localization
+## 🎮 Running the Agent
+Aurora uses `inference.py` as its primary execution entrypoint. It utilizes the OpenAI client to iterate through the 3 task tiers.
 
-## ⚙️ Features
+```cmd
+# Option A: Real LLM Mode (requires OpenAI API Key)
+set OPENAI_API_KEY=sk-your-key-here
+py inference.py
 
-### ✅ Sandboxed Execution
-- Dockerized sandbox prevents host machine access
-- Isolated file system per episode
-- Subprocess execution with timeouts
-- Resource limits (memory, CPU)
-
-### 🎮 Action Space
-```python
-- read_file(path: str) → str
-- write_file(path: str, content: str) → bool
-- run_pytest() → {"stdout": str, "stderr": str, "returncode": int}
+# Option B: Mock Demo Mode (no key required)
+set OPENAI_API_KEY=mock
+py inference.py
 ```
 
-### 👁️ Observation Space
+> [!NOTE]
+> Aurora will automatically detect if `OPENAI_API_KEY` is missing or invalid and fall back to the **Mock Agent**. To switch back to the real LLM, simply provide a valid API key in your environment variables.
+
+
+## 🌳 Pydantic API Spec
+Aurora adheres to the strict OpenEnv-v4 data schemas:
+
+### Observation (`ASRObservation`)
 ```python
 {
-    "file_tree": str,           # Current directory structure
-    "current_file": str,        # Content of 'watched' file
-    "last_output": str,         # Last 100 lines of terminal output
-    "parse_tree": dict,         # Tree-sitter AST representation
-    "test_results": dict,       # Last test run results
+    "file_tree": "...",      # Directory structure
+    "current_file": "...",   # Content with line numbers
+    "test_results": {...},    # Pytest summary
+    "reward": 0.0,           # Scalar reward
+    "asr_reward": {...},      # Detailed Pydantic Reward Model
+    "done": False            # Termination flag
 }
 ```
 
-### 🏆 Reward Logic
-```
-+50 per test: Fail → Pass
-+200: All tests pass
--100: SyntaxError introduced
--10: Illegal file operation (e.g., accessing /etc/)
-+5: Asking for human feedback when 90% uncertain (optional)
-```
-
-### 🛡️ Safety Features
-- File I/O sandboxing (whitelist: `src/`, `tests/` only)
-- Syntax validation via AST parsing
-- Memory/timeout limits
-- Human-in-the-loop approval for risky operations
-
-### 🌳 Tree-Sitter Integration
-The agent sees code as **parsed syntax trees**, not raw text:
+### Action (`ASRAction`)
 ```python
 {
-    "node_type": "function_definition",
-    "name": "calculate_sum",
-    "parameters": [...],
-    "body": {...},
+    "command": "read_file",  # Options: read_file, write_file, run_pytest
+    "params": {"path": "..."}
 }
 ```
 
-## 🚀 Quick Start
+## 📊 Task Tiers
+1. **Easy (`tasks/easy`)**: Fix a simple `NameError` (undefined variable).
+2. **Medium (`tasks/medium`)**: Repair an off-by-one error in a factorial implementation.
+3. **Hard (`tasks/hard`)**: Address a `ZeroDivisionError` in a complex data processor.
 
-### Installation
-```bash
-# Clone and install
-git clone https://github.com/YOUR-USERNAME/openenv-asr.git
-cd openenv-asr
-pip install -e .
-
-# Install dependencies
-pip install -r requirements.txt
+## 🛡️ Validation
+Verify the repository structure and compliance using the OpenEnv CLI:
+```cmd
+py -m openenv.cli validate .
 ```
-
-### Simple Example
-```python
-from environment.asr_env import ASREnvironment
-
-# Initialize environment
-env = ASREnvironment(
-    repo_template="sample_buggy_code",
-    num_tests=5,
-    docker_image="openenv-asr:latest"
-)
-
-# Reset for new episode
-obs = env.reset()
-
-# Agent takes action
-obs, reward, done, info = env.step(
-    action="read_file",
-    params={"path": "src/calculator.py"}
-)
-
-# Check observations
-print(obs["file_tree"])
-print(obs["current_file"])
-print(obs["parse_tree"])
-```
-
-## 📦 Environment Structure
-
-### Per-Episode Sandbox
-```
-/tmp/episode_<id>/
-├── src/
-│   ├── calculator.py          (buggy code)
-│   └── utils.py
-├── tests/
-│   ├── test_basic.py          (5 test files)
-│   ├── test_edge_cases.py
-│   └── ...
-├── .gitignore
-└── pytest.ini
-```
-
-### Initialization
-1. **Copy template** buggy repo to `/tmp/episode_<id>/`
-2. **Run pytest** to identify failing tests
-3. **Parse AST** via Tree-sitter for initial observation
-4. **Yield initial obs** with file tree, parse trees, and test results
-
-## 🤖 Training an Agent
-
-```python
-from environment.asr_env import ASREnvironment
-from agents.example_repair_agent import RepairAgent
-
-env = ASREnvironment(num_tests=5)
-agent = RepairAgent(
-    use_tree_sitter=True,
-    human_in_the_loop_threshold=0.9
-)
-
-for episode in range(100):
-    obs = env.reset()
-    done = False
-    total_reward = 0
-    
-    while not done:
-        action, confidence = agent.get_action(obs)
-        
-        # Human approval for uncertain, risky actions
-        if confidence < 0.9 and action in ["write_file", "modify_config"]:
-            approval = input(f"Approve action? {action} (y/n): ")
-            if approval != "y":
-                reward = 5  # Small reward for asking
-                continue
-        
-        obs, reward, done, info = env.step(action, info["params"])
-        total_reward += reward
-    
-    print(f"Episode {episode}: Total reward = {total_reward}")
-```
-
-## 🏗️ Architecture
-
-### Core Components
-
-#### `ASREnvironment` (Gym-compatible)
-- Manages episodes, resets, steps
-- Handles sandbox creation/cleanup
-- Orchestrates Docker execution
-
-#### `Sandbox` 
-- Dockerized Python execution
-- File system isolation
-- Timeout/resource management
-
-#### `ObservationSpace`
-- Builds file tree representation
-- Extracts current file content
-- Parses AST via Tree-sitter
-- Formats terminal output history
-
-#### `ActionSpace`
-- Validates actions (type, parameters)
-- Executes read/write/run_pytest
-- Checks sandbox constraints
-
-#### `RewardLogic`
-- Tracks test state changes
-- Detects syntax errors
-- Awards human-in-the-loop bonus
-- Provides step rewards
-
-#### `TreeSitterParser`
-- Parses Python AST
-- Converts to JSON representation
-- Identifies function/class definitions
-- Extracts variable assignments
-
-## 📊 Observation Example
-
-```json
-{
-    "file_tree": "src/\n  ├── calculator.py\n  └── utils.py\ntests/\n  └── test_calculator.py",
-    "current_file": "def add(a, b):\n    return a + b + c  # Bug: 'c' undefined",
-    "parse_tree": {
-        "type": "module",
-        "body": [
-            {
-                "type": "function_def",
-                "name": "add",
-                "parameters": ["a", "b"],
-                "body": [...],
-                "errors": ["NameError: name 'c' is not defined"]
-            }
-        ]
-    },
-    "test_results": {
-        "passed": 2,
-        "failed": 3,
-        "details": [
-            {"test": "test_add_basic", "status": "PASS"},
-            {"test": "test_add_negative", "status": "FAIL", "error": "NameError"}
-        ]
-    },
-    "last_output": "... last 100 lines of pytest output ..."
-}
-```
-
-## 🔒 Safety & Sandboxing
-
-### File Operation Whitelist
-```python
-ALLOWED_PATHS = [
-    "/tmp/episode_<id>/src/**/*.py",
-    "/tmp/episode_<id>/tests/**/*.py",
-]
-```
-
-### Prevented Operations
-- ❌ Deleting test files
-- ❌ Writing outside `src/` and `tests/`
-- ❌ Modifying system files
-- ❌ Running arbitrary commands
-- ❌ Creating symlinks to `/etc/`, `/home/`, etc.
-
-### Execution Controls
-- Subprocess timeout: 30 seconds
-- Memory limit: 512MB
-- CPU limit: 1 core
-- Network: Disabled
-
-## 👤 Human-in-the-Loop
-
-Enable human feedback for uncertain decisions:
-
-```python
-env = ASREnvironment(human_in_the_loop=True)
-
-action, confidence = agent.get_action(obs)
-
-if confidence < 0.9:
-    # Agent asks for help
-    print(f"Agent confidence: {confidence:.2%}")
-    print(f"Proposed action: {action}")
-    human_choice = input("Approve? (y/n): ")
-    reward += 5 if human_choice == "y" else -5
-```
-
-## 🌳 Tree-Sitter Capabilities
-
-Parse Python code into structured AST:
-
-```python
-from environment.tree_sitter_parser import TreeSitterParser
-
-parser = TreeSitterParser()
-tree = parser.parse("def foo(x): return x + 1")
-
-print(tree)
-# Output: {
-#   "type": "module",
-#   "functions": [
-#       {
-#           "name": "foo",
-#           "params": ["x"],
-#           "returns": "x + 1"
-#       }
-#   ]
-# }
-```
-
-## 📝 Customization
-
-### Create Custom Buggy Repos
-
-1. Create `repos/my_buggy_code/`:
-```
-my_buggy_code/
-├── src/
-│   └── main.py
-├── tests/
-│   └── test_main.py
-└── pytest.ini
-```
-
-2. Register in environment:
-```python
-env = ASREnvironment(repo_template="my_buggy_code")
-```
-
-### Extend Reward Function
-
-```python
-from environment.reward_logic import RewardLogic
-
-class CustomRewardLogic(RewardLogic):
-    def compute_reward(self, prev_results, curr_results):
-        reward = super().compute_reward(prev_results, curr_results)
-        
-        # Add custom bonus for code coverage
-        if curr_results["coverage"] > prev_results["coverage"]:
-            reward += 25
-        
-        return reward
-```
-
-## 🧪 Testing
-
-```bash
-pytest tests/
-pytest tests/test_integration.py -v
-```
-
-## 📚 References
-
-- [OpenAI Gym Documentation](https://gym.openai.com/)
-- [Tree-sitter Python Bindings](https://github.com/tree-sitter/py-tree-sitter)
-- [Docker Python SDK](https://docker-py.readthedocs.io/)
-- [Pytest Documentation](https://docs.pytest.org/)
 
 ## 🤝 Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
+Contributions welcome! Please see [ARCHITECTURE.md](ARCHITECTURE.md) for deeper technical details.
 
 ## 📄 License
-
 MIT License - See LICENSE file
-
-## 🎓 Citation
-
-If you use this environment in research, please cite:
-
-```bibtex
-@software{openenv_asr_2026,
-  title={OpenEnv: Automated Software Repair Environment},
-  author={Your Name},
-  year={2026},
-  url={https://github.com/YOUR-USERNAME/openenv-asr}
-}
-```
-
----
-
-**Hub-ready**: `pip install openenv-asr` - Train agents anywhere! 🚀

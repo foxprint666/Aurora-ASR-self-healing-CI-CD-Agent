@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+test_gemini.py
+test_gemini_new.py
+test_key.py
+test_key_new.py
+.env
+.ipynb_checkpoints/

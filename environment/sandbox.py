@@ -19,7 +19,6 @@ class Sandbox:
             image: Docker image to use
             timeout: Subprocess timeout in seconds
         """
-        self.client = docker.from_env()
         self.image = image
         self.timeout = timeout
         self.container = None

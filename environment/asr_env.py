@@ -1,24 +1,16 @@
-import gym
-from gym import spaces
-import os
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any, Optional
 from environment.sandbox import Sandbox
 from environment.observation_space import ObservationSpace
 from environment.action_space import ActionSpace
 from environment.reward_logic import RewardLogic
+from environment.models import ASRObservation, ASRAction, ASRState, ASRReward
+from openenv.core.env_server.interfaces import Environment
 
-class ASREnvironment(gym.Env):
+class ASREnvironment(Environment[ASRAction, ASRObservation, ASRState]):
     """
-    OpenEnv environment for Automated Software Repair.
-    
-    An agent must fix a buggy Python repository by:
-    - Reading source files
-    - Modifying code
-    - Running tests
-    - Learning from test results
+    Strict OpenEnv-v4 compliant environment for Aurora ASR.
+    Inherits from openenv-core's Environment base class.
     """
-
-    metadata = {'render.modes': ['human']}
 
     def __init__(
         self,
@@ -28,18 +20,7 @@ class ASREnvironment(gym.Env):
         human_in_the_loop: bool = False,
         timeout: int = 30,
     ):
-        """
-        Initialize ASR environment.
-        
-        Args:
-            repo_template: Path to buggy repository template
-            num_tests: Expected number of tests
-            max_steps: Maximum steps per episode
-            human_in_the_loop: Enable human feedback
-            timeout: Subprocess timeout in seconds
-        """
-        super(ASREnvironment, self).__init__()
-        
+        super().__init__()
         self.repo_template = repo_template
         self.num_tests = num_tests
         self.max_steps = max_steps
@@ -57,120 +38,112 @@ class ASREnvironment(gym.Env):
         self.current_file = None
         self.last_test_results = None
         self.episode_reward = 0
-        
-        # Gym spaces (simplified)
-        self.action_space = spaces.Discrete(3)  # read, write, run_pytest
-        self.observation_space = spaces.Dict({})  # Flexible observation space
 
-    def reset(self) -> Dict:
+    @property
+    def state(self) -> ASRState:
         """
-        Reset environment for new episode.
-        
-        Returns:
-            Initial observation
+        Get current environment state as a Pydantic model.
+        Satisfies openenv-core's state property requirement.
         """
-        # Cleanup previous episode
+        return ASRState(
+            episode_id=str(getattr(self.sandbox, 'id', 'default')),
+            step_count=self.current_step,
+            current_file=self.current_file,
+            last_test_results=self.last_test_results or {},
+            repo_template=self.repo_template
+        )
+
+    def reset(
+        self,
+        seed: Optional[int] = None,
+        episode_id: Optional[str] = None,
+        **kwargs: Any
+    ) -> ASRObservation:
+        """
+        Reset the environment for a new episode.
+        Satisfies openenv-core's reset() signature.
+        """
         if self.sandbox:
             self.sandbox.cleanup()
         
-        # Create new sandbox
         self.sandbox = Sandbox(timeout=self.timeout)
         episode_dir = self.sandbox.create_episode_environment(self.repo_template)
         
-        # Initialize components
         self.observation_builder = ObservationSpace(episode_dir)
         self.action_executor = ActionSpace(self.sandbox)
-        self.reward_logic.prev_test_results = None
         
-        # Reset state
         self.current_step = 0
         self.current_file = None
         self.episode_reward = 0
         
-        # Run initial pytest to get baseline
         test_results = self.sandbox.run_pytest()
         self.last_test_results = test_results
-        self.observation_builder.add_terminal_output(test_results["stdout"])
+        self.observation_builder.add_terminal_output(test_results.get("stdout", ""))
         
-        return self.observation_builder.get_observation(
+        obs_dict = self.observation_builder.get_observation(
             current_file=self.current_file,
             last_test_output=test_results
         )
-
-    def step(self, action: int, params: Dict = None) -> Tuple[Dict, float, bool, Dict]:
-        """
-        Execute one environment step.
         
-        Args:
-            action: Action ID (0=read_file, 1=write_file, 2=run_pytest)
-            params: Action parameters
-            
-        Returns:
-            Tuple of (observation, reward, done, info)
+        # Return Pydantic Observation
+        return ASRObservation(
+            **obs_dict,
+            done=False,
+            reward=0.0
+        )
+
+    def step(
+        self,
+        action: ASRAction,
+        timeout_s: Optional[float] = None,
+        **kwargs: Any
+    ) -> ASRObservation:
+        """
+        Execute one step in the environment.
+        Satisfies openenv-core's step() signature.
         """
         self.current_step += 1
-        params = params or {}
         
-        # Map action ID to action name
-        action_names = ["read_file", "write_file", "run_pytest"]
-        if action < 0 or action >= len(action_names):
-            return self._get_observation(), -10, False, {"error": "Invalid action"}
+        # Execute action using the Action model's command/params
+        result, info = self.action_executor.execute_action(action.command, action.params)
         
-        action_name = action_names[action]
-        
-        # Execute action
-        result, info = self.action_executor.execute_action(action_name, params)
-        
-        # Update current file if reading
-        if action_name == "read_file" and params.get("path"):
-            self.current_file = params["path"]
-        
-        # Run pytest if not already done
-        if action_name != "run_pytest":
-            test_results = self.sandbox.run_pytest()
-        else:
-            test_results = result if result else {}
-        
+        if action.command == "read_file" and action.params.get("path"):
+            self.current_file = action.params["path"]
+            
+        test_results = self.sandbox.run_pytest()
         self.last_test_results = test_results
         self.observation_builder.add_terminal_output(
             test_results.get("stdout", "") + "\n" + test_results.get("stderr", "")
         )
         
-        # Compute reward
-        reward = self.reward_logic.compute_reward(action_name, info, test_results)
-        self.episode_reward += reward
+        # Compute Reward
+        reward_value = self.reward_logic.compute_reward(action.command, info, test_results)
+        self.episode_reward += reward_value
         
-        # Check if done
-        failed_count = test_results.get("failed", 0)
-        all_passed = failed_count == 0
-        done = all_passed or self.current_step >= self.max_steps
-        
-        # Get observation
-        obs = self._get_observation()
-        
-        info.update({
-            "step": self.current_step,
-            "total_reward": self.episode_reward,
-            "tests_passed": test_results.get("passed", 0),
-            "tests_failed": test_results.get("failed", 0),
-        })
-        
-        return obs, reward, done, info
-
-    def _get_observation(self) -> Dict:
-        """Build current observation."""
-        return self.observation_builder.get_observation(
-            current_file=self.current_file,
-            last_test_output=self.last_test_results
+        # Create a Pydantic Reward Model
+        asr_reward = ASRReward(
+            value=reward_value,
+            syntax_penalty=info.get("syntax_penalty", 0.0),
+            test_bonus=info.get("test_bonus", 0.0),
+            efficiency_bonus=-1.0 # Static step penalty for now
         )
-
-    def render(self, mode='human'):
-        """Render environment state."""
-        print(f"\n--- Step {self.current_step} ---")
-        print(f"Episode Reward: {self.episode_reward}")
-        if self.last_test_results:
-            print(f"Tests: {self.last_test_results.get('passed', 0)} passed, "
-                  f"{self.last_test_results.get('failed', 0)} failed")
+        
+        # Check termination
+        failed_count = test_results.get("failed", 0)
+        done = (failed_count == 0) or (self.current_step >= self.max_steps)
+        
+        obs_dict = self.observation_builder.get_observation(
+            current_file=self.current_file,
+            last_test_output=test_results
+        )
+        
+        # Return Pydantic Observation with embedded Reward model
+        return ASRObservation(
+            **obs_dict,
+            done=done,
+            reward=reward_value,
+            asr_reward=asr_reward
+        )
 
     def close(self):
         """Clean up resources."""
