@@ -41,7 +41,19 @@ def run_inference(task_id: str, repo_path: str):
     """
     Run the ASR repair agent on a specific task.
     """
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "mock_key"))
+    api_key = os.getenv("OPENAI_API_KEY", "mock_key")
+    
+    # Dynamically support both OpenAI (sk-) and Google Gemini (AIza-)!
+    if api_key.startswith("AIza"):
+        client = OpenAI(
+            api_key=api_key, 
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        agent_model = "gemini-2.5-flash"
+    else:
+        client = OpenAI(api_key=api_key)
+        agent_model = "gpt-4-turbo-preview"
+        
     env = ASREnvironment(repo_template=repo_path, max_steps=10)
     
     print(f"[START] Task Selection: {task_id}")
@@ -72,7 +84,7 @@ Respond in JSON format: {{"command": "...", "params": {{...}}}}
         if not use_mock:
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4-turbo-preview",
+                    model=agent_model,
                     messages=[{"role": "user", "content": prompt}],
                     response_format={ "type": "json_object" }
                 )
