@@ -19,6 +19,9 @@ def run_aurora_repair(api_key, task_type, uploaded_zip=None):
     
     cmd = [sys.executable, "inference.py"]
     
+    terminal_output = ""
+    env_output = ""
+    
     # Handle Custom Upload
     temp_dir = None
     if task_type == "Custom Upload" and uploaded_zip is not None:
@@ -32,9 +35,10 @@ def run_aurora_repair(api_key, task_type, uploaded_zip=None):
                 zip_ref.extractall(temp_dir)
             
             cmd.extend(["--task_id", "custom_upload", "--repo_path", temp_dir])
-            yield f"📂 Extracted custom code to: {temp_dir}\n"
+            terminal_output = f"📂 Extracted custom code to: {temp_dir}\n"
+            yield terminal_output, ""
         except Exception as e:
-            yield f"❌ Error extracting file: {str(e)}\n"
+            yield f"❌ Error extracting file: {str(e)}\n", ""
             return
     
     # Run the inference script and capture output in real-time
@@ -46,10 +50,12 @@ def run_aurora_repair(api_key, task_type, uploaded_zip=None):
         env=env
     )
     
-    partial_output = ""
     for line in iter(process.stdout.readline, ""):
-        partial_output += line
-        yield partial_output
+        if line.startswith(">>>"):
+            env_output += line
+        else:
+            terminal_output += line
+        yield terminal_output, env_output
     
     process.stdout.close()
     process.wait()
@@ -57,7 +63,8 @@ def run_aurora_repair(api_key, task_type, uploaded_zip=None):
     # Cleanup temp directory if created
     if temp_dir and os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
-        yield f"\n🧹 Cleaned up temporary directory: {temp_dir}"
+        terminal_output += f"\n🧹 Cleaned up temporary directory: {temp_dir}"
+        yield terminal_output, env_output
 
 # UI Design
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
@@ -92,10 +99,16 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             run_btn = gr.Button("🔥 Start Repair Pipeline", variant="primary")
             
         with gr.Column(scale=2):
+            terminal_log = gr.Textbox(
+                label="💻 Background AI Terminal", 
+                lines=12, 
+                max_lines=15,
+                autoscroll=True
+            )
             output_log = gr.Textbox(
-                label="Repair Logs (Real-time)", 
-                lines=25, 
-                max_lines=30,
+                label="🛡️ OpenEnv-v4 Grader Logs", 
+                lines=12, 
+                max_lines=15,
                 autoscroll=True
             )
 
@@ -108,7 +121,7 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     run_btn.click(
         fn=run_aurora_repair, 
         inputs=[key_input, task_selector, file_upload], 
-        outputs=[output_log]
+        outputs=[terminal_log, output_log]
     )
     
     gr.Markdown("""

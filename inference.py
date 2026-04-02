@@ -102,6 +102,21 @@ Respond in JSON format: {{"command": "...", "params": {{...}}}}
             
         action = ASRAction(**action_data)
         
+        # --- Simulated Terminal Commands for UI Presentation ---
+        if action.command == "run_pytest":
+            console.print("[dim white]$ pytest tests/ -v[/dim white]")
+        elif action.command == "read_file":
+            path = action.params.get('path', '')
+            console.print(f"[dim white]$ cat {path}[/dim white]")
+        elif action.command == "write_file":
+            path = action.params.get('path', '')
+            console.print(f"[dim white]$ vim {path}  # (AI Applying Patch)[/dim white]")
+        else:
+            console.print(f"[dim white]$ {action.command}[/dim white]")
+            
+        time.sleep(0.4) # Slight pause to simulate typing/execution
+        # --------------------------------------------------------
+        
         # Step the environment (now returns Observation directly per openenv-core spec)
         observation = env.step(action)
         reward = observation.reward
