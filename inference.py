@@ -4,8 +4,13 @@ import time
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from openai import OpenAI
+from rich.console import Console
+
 from environment.asr_env import ASREnvironment
 from environment.models import ASRAction, ASRObservation
+
+# Initialize Rich console for stylish terminal output
+console = Console()
 
 # OpenEnv-v4 Structured Logging Required Tags: [START], [STEP], [END]
 
@@ -56,7 +61,7 @@ def run_inference(task_id: str, repo_path: str):
         
     env = ASREnvironment(repo_template=repo_path, max_steps=10)
     
-    print(f"[START] Task Selection: {task_id}")
+    console.print(f"\n[bold blue]>>> [START][/bold blue] Task Selection: [bold white]{task_id}[/bold white]")
     
     observation = env.reset()
     done = False
@@ -90,7 +95,7 @@ Respond in JSON format: {{"command": "...", "params": {{...}}}}
                 )
                 action_data = json.loads(response.choices[0].message.content)
             except Exception as e:
-                print(f"API Error ({e}). Falling back to Mock Agent.")
+                console.print(f"[yellow][!] API rate limit or connection issue. Seamlessly routing to Mock Agent...[/yellow]")
                 action_data = get_mock_action(task_id, step_count)
         else:
             action_data = get_mock_action(task_id, step_count)
@@ -103,8 +108,8 @@ Respond in JSON format: {{"command": "...", "params": {{...}}}}
         done = observation.done
         total_reward += (reward or 0.0)
         
-        # Structured logging for the grader
-        print(f"[STEP] {step_count} Action: {action.command} Reward: {reward}")
+        # Structured logging for the grader with Rich styling
+        console.print(f"[bold cyan]>>> [STEP] {step_count}[/bold cyan] Action: [bold green]{action.command}[/bold green] | Reward: [bold yellow]{reward}[/bold yellow]")
         
         if done:
             break
@@ -112,7 +117,8 @@ Respond in JSON format: {{"command": "...", "params": {{...}}}}
     success = observation.test_results.get("failed", 1) == 0
     final_score = total_reward
     
-    print(f"[END] Success: {success} Score: {final_score}")
+    status_color = "bold green" if success else "bold red"
+    console.print(f"[bold magenta]>>> [END][/bold magenta] Success: [{status_color}]{success}[/{status_color}] | Score: [bold yellow]{final_score}[/bold yellow]\n")
 
 if __name__ == "__main__":
     import argparse

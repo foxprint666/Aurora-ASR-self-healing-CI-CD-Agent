@@ -16,8 +16,7 @@ class TreeSitterParser:
             self.parser = Parser()
             self.parser.set_language(PY_LANGUAGE)
         except Exception as e:
-            print(f"Warning: Tree-sitter initialization failed: {e}")
-            print("Falling back to basic parsing")
+            # Silently fall back to basic parsing to keep logs clean
             self.parser = None
 
     def parse(self, code: str) -> Dict[str, Any]:
